@@ -16,10 +16,10 @@ setup_iptables() {
 
 main() {
 	case "$1" in
-	--links)			links;;   
-	--setup-iptables)	setup_iptables;;
-	--omnimode)			/bin/ambassadord;;
-	*)					/bin/ambassadord "$1";;
+	--links)            links;;   
+	--setup-iptables)   setup_iptables;;
+	--omnimode)         /bin/ambassadord;;
+	*)                  /bin/ambassadord "$1";;
 	esac
 }
 
