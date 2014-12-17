@@ -47,11 +47,12 @@ func (s *ConsulStore) Get(path string) string {
 	return string(kv.Value)
 }
 
-func (s *ConsulStore) Watch(path string) {
+func (s *ConsulStore) Watch(path string) error {
 	_, meta, err := s.client.KV().Get(path, &consulapi.QueryOptions{WaitIndex: s.waitIndex})
 	if err != nil {
 		log.Println("consul:", err)
 	} else {
 		s.waitIndex = meta.LastIndex
 	}
+	return err
 }

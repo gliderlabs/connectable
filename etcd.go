@@ -26,6 +26,11 @@ func (s *EtcdStore) List(path string) (list []string) {
 		log.Println("etcd:", err)
 		return
 	}
+	
+	// Reset the waitIndex to avoid configBackends.WatchToUpdate() getting 
+	// stuck on "401: The event in requested index is outdated and cleared"
+	s.waitIndex = resp.EtcdIndex + 1
+	
 	if resp.Node == nil {
 		return
 	}
@@ -45,17 +50,23 @@ func (s *EtcdStore) Get(path string) string {
 		log.Println("etcd:", err)
 		return ""
 	}
+	
+	// Reset the waitIndex to avoid configBackends.WatchToUpdate() getting 
+	// stuck on "401: The event in requested index is outdated and cleared"
+	s.waitIndex = resp.EtcdIndex + 1
+	
 	if resp.Node == nil {
 		return ""
 	}
 	return string(resp.Node.Value)
 }
 
-func (s *EtcdStore) Watch(path string) {
+func (s *EtcdStore) Watch(path string) error {
 	resp, err := s.client.Watch(path, s.waitIndex, true, nil, nil)
 	if err != nil {
 		log.Println("etcd:", err)
 	} else {
 		s.waitIndex = resp.EtcdIndex + 1
 	}
+    return err
 }
