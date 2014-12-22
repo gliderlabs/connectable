@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 	"net"
 	"net/url"
 	"strconv"
@@ -19,7 +20,7 @@ type BackendProvider interface {
 type ConfigStore interface {
 	List(path string) []string
 	Get(path string) string
-	Watch(path string)
+	Watch(path string) error
 }
 
 func NewConfigStore(uri *url.URL) ConfigStore {
@@ -98,8 +99,19 @@ type configBackends struct {
 }
 
 func (b *configBackends) WatchToUpdate() {
+	backoff := 1 * time.Second
 	for {
-		b.store.Watch(b.path)
+		err := b.store.Watch(b.path)
+		if err != nil {
+			time.Sleep(backoff)
+			backoff = backoff * 2
+		    if backoff > 30 * time.Second {
+				backoff = 30 * time.Second
+			}
+		} else {
+			backoff = 1 * time.Second
+		}
+		
 		b.Update()
 	}
 }
