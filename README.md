@@ -1,3 +1,5 @@
+> NOTE: This project is starting to get some attention from mentions at conferences and such, but it's important to know that this project is likely to change drastically (perhaps even change its name) very soon. Consider it a proof of concept. 
+
 # ambassadord
 
 A Docker ambassador (containerized TCP reverse proxy / forwarder) that supports static forwards, DNS-based forwards (with SRV), Consul+Etcd based forwards, or forwards based on the connecting container's intended backend (read: magic).
