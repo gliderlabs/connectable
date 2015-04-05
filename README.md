@@ -1,62 +1,127 @@
-> NOTE: This project is starting to get some attention from mentions at conferences and such, but it's important to know that this project is likely to change drastically (perhaps even change its name) very soon. Consider it a proof of concept. 
+# Connectable (previously ambassadord)
 
-# ambassadord
+A smart Docker proxy that lets your containers connect to other containers via service
+discovery without being service discovery aware.
 
-A Docker ambassador (containerized TCP reverse proxy / forwarder) that supports static forwards, DNS-based forwards (with SRV), Consul+Etcd based forwards, or forwards based on the connecting container's intended backend (read: magic).
+## Getting Connectable
 
-## Getting ambassadord
+You can get the Connectable micro container from the Docker Hub.
 
-You can get the ambassadord container from the Docker Hub. It is a trusted build.
+	$ docker pull progrium/connectable
 
-	$ docker pull progrium/ambassadord
+## Using Connectable
 
-## Using ambassadord
+Basic overview is:
 
-There are two ways to use ambassadord. The first is called standard mode, where it acts as an ambassador for one pre-defined type of backend. This is most like the normal ambassador pattern, but with support for dynamic backend lookups. 
+ 1. Run a service registry like Consul, perhaps with Registrator
+ 1. Start a Connectable container on each host
+ 1. Expose Connectable to your containers, using links or Resolvable (experimental)
+ 1. Run containers with environment variables defining what they need to connect to
+ 1. Have software in those containers connect to backing services via Connectable
 
-The second is called omni mode, where it can be used for *any* type of backend based on data provided by the connecting container's environment. Using omni mode means you only need to run one ambassador on a host, then all containers can use it for connecting to all their dependent backends. 
+#### Starting Connectable
 
-### Standard mode (aka boring-but-useful mode)
+Once you have a service registry set up, you point Connectable to it when you launch it.
+You also need to mount the Docker socket. Here is an example using the local Consul agent, assuming you're running Resolvable:
 
-Ambassador to fixed/resolved backend(s) using domain or IP and port. Listens on same port as destination.
+	$ docker run -d --name connectable \
+			-v /var/run/docker.sock:/var/run/docker.sock \
+			progrium/connectable:latest \
+			consul://consul.docker:8500
 
-	$ docker run -d --expose 8080 progrium/ambassadord 192.168.1.100:8080
-	$ docker run -d --expose 6379 progrium/ambassadord redis.example.com:6379
-	$ docker run -d --expose 6379 progrium/ambassadord redis-1.example.com:6379,redis-2.example.com:6379
+Connectable supports other registries and is extendable via modules.
 
-Ambassador to fixed backend defined by container link(s). Listens on the same ports as the link ports.
+If you're running Consul with DNS available to your containers using the `-dns` flag or using Resolvable, you don't have to specify any registry. Connectable will do SRV lookups via DNS by default:
 
-	$ docker run -d --expose 6379 --link redis:redis progrium/ambassadord --links
-	$ docker run -d --expose 6379 --expose 8080 --link redis:redis --link http:http progrium/ambassadord --links
+	$ docker run -d --name connectable \
+			-v /var/run/docker.sock:/var/run/docker.sock \
+			progrium/connectable:latest
 
-Ambassador to backends resolved using SRV from DNS (ie Consul service discovery). Always listens on default exposed port 10000.
+#### Start containers that use Connectable
 
-	$ docker run -d progrium/ambassadord redis.service.consul
+First, you need to expose the running Connectable container to new containers. Normally this is done using links. Links are unnecessary if you're running Resolvable. However, in this example we'll use links.
 
-Ambassador to backends found in configuration KV store. Uses the values of child nodes if the path has children, otherwise, uses the value found at the given path. Lookups are cached and updated when the value changes in the configuration store. Always listens on exposed port 10000.
+The only other step you need to do is specify the name of the service(s) you want to connect to using environment variables. You also specify a port you'll use when connecting to Connectable. For example:
 
-	$ docker run -d progrium/ambassadord etcd://127.0.0.1:4001/path/to/backend/nodes
-	$ docker run -d progrium/ambassadord consul://127.0.0.1:8500/path/to/backend/nodes
+	CONNECT_6000=redis.service.consul
 
-### Omni mode (aka magic mode)
+With this environment variable set, you can connect to Connectable on 6000 and it will take you to the Redis service found via Consul DNS. You can also specify multiple services:
 
-Start the ambassador in omni mode, passing the Docker socket:
+	$ docker run -d --name myservice \
+			-e CONNECT_6000=redis.service.consul \
+			-e CONNECT_3306=master.mysql.service.consul \
+			--link connectable:connectable \
+			example/myservice
 
-	$ docker run -d -v /var/run/docker.sock:/var/run/docker.sock --name backends progrium/ambassadord --omnimode
+Now in your service container, you can connect to `connectable:6000` to get to Redis and `connectable:3306` to get to your MySQL master. If you were using Resolvable, you could drop the link and use `connectable.docker` instead of `connectable` when connecting.
 
-This container, named `backends`, listens on exported port 10000, but needs to handle connections on all ports on its interface. To configure this, we run another ambassadord container with `--privileged` attached to the `backends` container's network, and we tell it to set up iptables for the ambassadord container:
+## Configuring Connectable
 
-	$ docker run --rm --privileged --net container:backends progrium/ambassadord --setup-iptables
+Connectable just needs to know what service registry to use and how to use it. It's easiest when you have DNS discovery available and you don't need to specify a registry. But, for example, if you were using etcd, you'd need to specify a URI with the etcd address and the prefix used for your services:
 
-Now we can start other containers that use ambassadord. They must be linked to the ambassadord container and specify their outgoing connection backends via `BACKEND` environment variables. For example, here we start a container that will have outgoing connections on 6379 sent to the backend defined by DNS SRV records for `redis.services.consul`:
+	$ docker run -d --name connectable \
+			-v /var/run/docker.sock:/var/run/docker.sock \
+			progrium/connectable:latest \
+			etcd://etcd.docker:4001/path/to/services
 
-	$ docker run -d --link backends:backends -e "BACKEND_6379=redis.services.consul" progrium/mycontainer startdaemon
+Different registry modules have different options that can be passed in the URI. For example, there is a `consulkv` module to use the KV store instead of Consul's service discovery API.
 
-Inside this container, any connections to `backends:6379` will be forwarded to backends resolved by `redis.services.consul`. You can set up multiple backends for several ports by adding more `BACKEND` environment variables using the port you'll be connecting with in the name and the backend to use in the value. Any of the backend definitions supported by standard mode can be used as a value.
+## Load Balancing
+
+Connectable acts as a load balancer across instance of services it finds. It shuffles them randomly on new connections. Although this seems less predictable, it ensures even balancing cluster-wide.
+
+Connectable is a reverse proxy and balancer, but it is not recommended to be used as your public facing balancer. Instead, use a more configurable balancer like haproxy or Nginx. Use Connectable for internal service-to-service connections. For example, you could use Connectable *with* Nginx to simplify your Nginx container setup.
+
+## Health Checking
+
+Currently Connectable does not have native health checking integration. For now, Connectable defers to the registry to return healthy services. For example, this is how Consul DNS works. Otherwise, when Connectable tries to connect to an endpoint and is unable to connect, it will try the next one transparently until all services have been tried. This covers some but not all "unhealthy" service cases.
+
+Future modules may add support for integration with health checking mechanisms.
+
+## Overhead
+
+Like all proxies, you incur overhead to your connections. Connectable is roughly comparable but slightly slower than Nginx. Not by much. Here is some data collected using HTTP requests via ApacheBench using `-n 200 -c 20`:
+```
+nginx:
+
+    Requests per second:    754.53 [#/sec] (mean)
+    Time per request:       26.507 [ms] (mean)
+    Time per request:       1.325 [ms] (mean, across all concurrent requests)
+
+connectable:
+
+    Requests per second:    606.32 [#/sec] (mean)
+    Time per request:       32.986 [ms] (mean)
+    Time per request:       1.649 [ms] (mean, across all concurrent requests)
+```
+Memory overhead is also roughly comparable per connection. Added network latency is near zero since it's running on the same host as clients. Keep in mind, Connectable is designed to run on each host for best performance and to avoid SPOF.
+
+Although Connectable is Good Enough for most cases, if the overhead is a deal breaker for a particular case, don't use it in that particular case. Alternatives include working with service registries directly, just using DNS discovery with known ports, setting up a full SDN, etc.
+
+## Modules
+
+Todo
+
+## Why not just DNS?
+
+If you're using Consul DNS, SkyDNS, et al, you may wonder why Connectable is necessary. The answer is ports. Most software is not designed for dynamic ports. Most software can only resolve hostnames to IPs. You have to hard configure the port used.
+
+If you are able to run all containers publishing exposed ports on known ports (`-p 80:80`), you might not need Connectable. If you have a fancy SDN solution that makes private container IPs publicly addressable and they use known ports, you don't need Connectable.
+
+However, if you run containers with non-conventional ports, or don't have control over published ports, or just want to not care and wish it were magically taken care of ... that's what Connectable is for.
+
+Connectable when combined with Registrator lets you run containers with `-P` and not care about what port they publish as.
+
+Also, DNS may not randomize results, effectively balancing services. Connectable ensures internal load balancing.
+
+## Notes
+
+https://github.com/docker/docker/issues/7468
+https://github.com/docker/docker/issues/7467
 
 ## Sponsor and Thanks
 
-This project was made possible thanks to [DigitalOcean](http://digitalocean.com). Also thanks to [Jérôme Petazzoni](https://github.com/jpetazzo) for helping me make the magic of omni mode work.
+The original ambassadord proof of concept was made possible thanks to [DigitalOcean](http://digitalocean.com). Also thanks to [Jérôme Petazzoni](https://github.com/jpetazzo) for helping with the bits that make this magical.
 
 ## License
 
