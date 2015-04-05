@@ -1,4 +1,4 @@
-> NOTE: This project is starting to get some attention from mentions at conferences and such, but it's important to know that this project is likely to change drastically (perhaps even change its name) very soon. Consider it a proof of concept. 
+> NOTE: This branch is an archive of the original ambassadord proof of concept that has become Connectable
 
 # ambassadord
 
@@ -12,9 +12,9 @@ You can get the ambassadord container from the Docker Hub. It is a trusted build
 
 ## Using ambassadord
 
-There are two ways to use ambassadord. The first is called standard mode, where it acts as an ambassador for one pre-defined type of backend. This is most like the normal ambassador pattern, but with support for dynamic backend lookups. 
+There are two ways to use ambassadord. The first is called standard mode, where it acts as an ambassador for one pre-defined type of backend. This is most like the normal ambassador pattern, but with support for dynamic backend lookups.
 
-The second is called omni mode, where it can be used for *any* type of backend based on data provided by the connecting container's environment. Using omni mode means you only need to run one ambassador on a host, then all containers can use it for connecting to all their dependent backends. 
+The second is called omni mode, where it can be used for *any* type of backend based on data provided by the connecting container's environment. Using omni mode means you only need to run one ambassador on a host, then all containers can use it for connecting to all their dependent backends.
 
 ### Standard mode (aka boring-but-useful mode)
 
