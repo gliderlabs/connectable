@@ -1,5 +1,5 @@
 NAME=connectable
-REPO=progrium
+REPO=gliderlabs
 VERSION=$(shell cat VERSION)
 
 dev:

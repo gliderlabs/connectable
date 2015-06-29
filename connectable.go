@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/fsouza/go-dockerclient"
-	"github.com/progrium/connectable/pkg/lookup"
+	"github.com/gliderlabs/connectable/pkg/lookup"
 )
 
 var Version string

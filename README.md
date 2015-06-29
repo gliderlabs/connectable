@@ -7,7 +7,7 @@ discovery *without being service discovery aware*.
 
 You can get the Connectable micro container from the Docker Hub.
 
-	$ docker pull progrium/connectable
+	$ docker pull gliderlabs/connectable
 
 ## Using Connectable
 
@@ -26,7 +26,7 @@ You also need to mount the Docker socket. Here is an example using the local Con
 
 	$ docker run -d --name connectable \
 			-v /var/run/docker.sock:/var/run/docker.sock \
-			progrium/connectable:latest
+			gliderlabs/connectable:latest
 
 With Resolvable running, it will have access to Consul DNS. It will be able to resolve any connections using DNS names.
 
