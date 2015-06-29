@@ -1,21 +1,11 @@
-NAME=ambassadord
-HARDWARE=$(shell uname -m)
-VERSION=0.0.1
+NAME=connectable
+REPO=progrium
+VERSION=$(shell cat VERSION)
 
-build:
-	go build -o stage/ambassadord
-	docker build -t ambassadord .
-
-release:
-	rm -rf release
-	mkdir release
-	GOOS=linux go build -o release/$(NAME)
-	cd release && tar -zcf $(NAME)_$(VERSION)_linux_$(HARDWARE).tgz $(NAME)
-	GOOS=darwin go build -o release/$(NAME)
-	cd release && tar -zcf $(NAME)_$(VERSION)_darwin_$(HARDWARE).tgz $(NAME)
-	rm release/$(NAME)
-	echo "$(VERSION)" > release/version
-	echo "progrium/$(NAME)" > release/repo
-	gh-release
-
-.PHONY: build
+dev:
+	@docker history $(NAME):dev &> /dev/null \
+		|| docker build -f Dockerfile.dev -t $(NAME):dev .
+	@docker run --rm --name $(NAME)-dev \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(PWD):/go/src/github.com/$(REPO)/$(NAME) \
+		$(NAME):dev

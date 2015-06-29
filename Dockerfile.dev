@@ -1,0 +1,9 @@
+FROM gliderlabs/alpine:3.2
+ENV GOPATH /go
+RUN apk-install go git mercurial iptables
+COPY . /go/src/github.com/progrium/connectable
+WORKDIR /go/src/github.com/progrium/connectable
+RUN go get
+CMD go get \
+	&& go build -ldflags "-X main.Version dev" -o /bin/connectable \
+	&& exec /bin/connectable

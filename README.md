@@ -1,7 +1,7 @@
-# Connectable (previously ambassadord)
+# Connectable
 
 A smart Docker proxy that lets your containers connect to other containers via service
-discovery without being service discovery aware.
+discovery *without being service discovery aware*.
 
 ## Getting Connectable
 
@@ -16,8 +16,8 @@ Basic overview is:
  1. Run a service registry like Consul, perhaps with Registrator
  1. Start a Connectable container on each host
  1. Expose Connectable to your containers, using links or Resolvable (experimental)
- 1. Run containers with environment variables defining what they need to connect to
- 1. Have software in those containers connect to backing services via Connectable
+ 1. Run containers with labels defining what they need to connect to with what ports
+ 1. Have software in those containers connect via those ports on localhost
 
 #### Starting Connectable
 
@@ -26,45 +26,22 @@ You also need to mount the Docker socket. Here is an example using the local Con
 
 	$ docker run -d --name connectable \
 			-v /var/run/docker.sock:/var/run/docker.sock \
-			progrium/connectable:latest \
-			consul://consul.docker:8500
-
-Connectable supports other registries and is extendable via modules.
-
-If you're running Consul with DNS available to your containers using the `-dns` flag or using Resolvable, you don't have to specify any registry. Connectable will do SRV lookups via DNS by default:
-
-	$ docker run -d --name connectable \
-			-v /var/run/docker.sock:/var/run/docker.sock \
 			progrium/connectable:latest
+
+With Resolvable running, it will have access to Consul DNS. It will be able to resolve any connections using DNS names.
 
 #### Start containers that use Connectable
 
-First, you need to expose the running Connectable container to new containers. Normally this is done using links. Links are unnecessary if you're running Resolvable. However, in this example we'll use links.
+All you have to do is specify a port to use and what you'd like to connect to as a label. For example:
 
-The only other step you need to do is specify the name of the service(s) you want to connect to using environment variables. You also specify a port you'll use when connecting to Connectable. For example:
+	connect[6000]=redis.service.consul
 
-	CONNECT_6000=redis.service.consul
-
-With this environment variable set, you can connect to Connectable on 6000 and it will take you to the Redis service found via Consul DNS. You can also specify multiple services:
+With this label set, you can connect to Redis on localhost:6000. You can also specify multiple services:
 
 	$ docker run -d --name myservice \
-			-e CONNECT_6000=redis.service.consul \
-			-e CONNECT_3306=master.mysql.service.consul \
-			--link connectable:connectable \
+			-l connect[6000]=redis.service.consul \
+			-l connect[3306]=master.mysql.service.consul \
 			example/myservice
-
-Now in your service container, you can connect to `connectable:6000` to get to Redis and `connectable:3306` to get to your MySQL master. If you were using Resolvable, you could drop the link and use `connectable.docker` instead of `connectable` when connecting.
-
-## Configuring Connectable
-
-Connectable just needs to know what service registry to use and how to use it. It's easiest when you have DNS discovery available and you don't need to specify a registry. But, for example, if you were using etcd, you'd need to specify a URI with the etcd address and the prefix used for your services:
-
-	$ docker run -d --name connectable \
-			-v /var/run/docker.sock:/var/run/docker.sock \
-			progrium/connectable:latest \
-			etcd://etcd.docker:4001/path/to/services
-
-Different registry modules have different options that can be passed in the URI. For example, there is a `consulkv` module to use the KV store instead of Consul's service discovery API.
 
 ## Load Balancing
 
@@ -121,8 +98,8 @@ https://github.com/docker/docker/issues/7467
 
 ## Sponsor and Thanks
 
-The original ambassadord proof of concept was made possible thanks to [DigitalOcean](http://digitalocean.com). Also thanks to [Jérôme Petazzoni](https://github.com/jpetazzo) for helping with the bits that make this magical.
+Connectable is sponsored by [Weave](http://weave.works). The original ambassadord proof of concept was made possible thanks to [DigitalOcean](http://digitalocean.com). Also thanks to [Jérôme Petazzoni](https://github.com/jpetazzo) for helping with the iptables bits that make this magical.
 
 ## License
 
-BSD
+MIT
