@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	env "github.com/MattAitchison/envconfig"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/gliderlabs/connectable/pkg/lookup"
 
@@ -21,15 +21,11 @@ import (
 var Version string
 
 var (
+	endpoint = env.String("docker_host", "unix:///var/run/docker.sock", "docker endpoint")
+	port     = env.String("port", "10000", "primary listen port")
+
 	self *docker.Container
 )
-
-func getopt(name, def string) string {
-	if env := os.Getenv(name); env != "" {
-		return env
-	}
-	return def
-}
 
 func assert(err error) {
 	if err != nil {
@@ -38,7 +34,6 @@ func assert(err error) {
 }
 
 func runNetCmd(container, image string, cmd string) error {
-	endpoint := "unix:///var/run/docker.sock"
 	client, err := docker.NewClient(endpoint)
 	if err != nil {
 		return err
@@ -57,8 +52,7 @@ func runNetCmd(container, image string, cmd string) error {
 	if err != nil {
 		return err
 	}
-	err = client.StartContainer(c.ID, nil)
-	if err != nil {
+	if err := client.StartContainer(c.ID, nil); err != nil {
 		return err
 	}
 	status, err := client.WaitContainer(c.ID)
@@ -66,7 +60,7 @@ func runNetCmd(container, image string, cmd string) error {
 		return err
 	}
 	if status != 0 {
-		return fmt.Errorf("non-zero exit: %v", status)
+		return fmt.Errorf("netcmd non-zero exit: %v", status)
 	}
 	return client.RemoveContainer(docker.RemoveContainerOptions{
 		ID:    c.ID,
@@ -90,13 +84,11 @@ func originalDestinationPort(conn net.Conn) (string, error) {
 }
 
 func inspectBackend(sourceIP, destPort string) (string, error) {
-	label := fmt.Sprintf("connect[%s]", destPort)
-
-	endpoint := "unix:///var/run/docker.sock"
 	client, err := docker.NewClient(endpoint)
 	if err != nil {
 		return "", err
 	}
+	label := fmt.Sprintf("connect[%s]", destPort)
 
 	// todo: cache, invalidate with container destroy events
 	containers, err := client.ListContainers(docker.ListContainersOptions{})
@@ -157,9 +149,10 @@ func proxyConn(conn net.Conn, addr string) {
 
 func setupContainer(id string) {
 	re := regexp.MustCompile("connect\\[(\\d+)\\]")
-	endpoint := "unix:///var/run/docker.sock"
 	client, err := docker.NewClient(endpoint)
-	assert(err)
+	if err != nil {
+		log.Println(err)
+	}
 	container, err := client.InspectContainer(id)
 	if err != nil {
 		log.Println(err)
@@ -188,7 +181,6 @@ func setupContainer(id string) {
 }
 
 func monitorContainers() {
-	endpoint := "unix:///var/run/docker.sock"
 	client, err := docker.NewClient(endpoint)
 	assert(err)
 	events := make(chan *docker.APIEvents)
@@ -206,29 +198,19 @@ func monitorContainers() {
 }
 
 func main() {
-	flag.Parse()
-	port := getopt("PORT", "10000")
-
-	/*
-		  var backends BackendProvider
-			if flag.Arg(0) != "" {
-				backends = NewBackendProvider(flag.Arg(0))
-			} else {
-				backends = NewOmniProvider()
-			}
-	*/
-
 	listener, err := net.Listen("tcp", ":"+port)
 	assert(err)
 
 	fmt.Printf("# Connectable %s listening on %s ...\n", Version, port)
 
-	endpoint := "unix:///var/run/docker.sock"
-	client, _ := docker.NewClient(endpoint)
+	client, err := docker.NewClient(endpoint)
+	assert(err)
 
-	list, _ := client.ListContainers(docker.ListContainersOptions{})
+	list, err := client.ListContainers(docker.ListContainersOptions{})
+	assert(err)
 	for _, listing := range list {
-		c, _ := client.InspectContainer(listing.ID)
+		c, err := client.InspectContainer(listing.ID)
+		assert(err)
 		if c.Config.Hostname == os.Getenv("HOSTNAME") {
 			self = c
 			if c.HostConfig.NetworkMode == "bridge" {
