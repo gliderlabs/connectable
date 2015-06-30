@@ -14,6 +14,8 @@ import (
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/gliderlabs/connectable/pkg/lookup"
+
+	_ "github.com/gliderlabs/connectable/pkg/lookup/dns"
 )
 
 var Version string
@@ -35,7 +37,7 @@ func assert(err error) {
 	}
 }
 
-func runNetCmd(container, image string, cmd []string) error {
+func runNetCmd(container, image string, cmd string) error {
 	endpoint := "unix:///var/run/docker.sock"
 	client, err := docker.NewClient(endpoint)
 	if err != nil {
@@ -43,8 +45,9 @@ func runNetCmd(container, image string, cmd []string) error {
 	}
 	c, err := client.CreateContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
-			Image: image,
-			Cmd:   cmd,
+			Image:      image,
+			Cmd:        []string{cmd},
+			Entrypoint: []string{"/bin/sh", "-c"},
 		},
 		HostConfig: &docker.HostConfig{
 			Privileged:  true,
@@ -162,6 +165,7 @@ func setupContainer(id string) {
 		log.Println(err)
 	}
 	if container.HostConfig.NetworkMode == "bridge" {
+		hasBackends := false
 		cmds := []string{
 			"/sbin/sysctl -w net.ipv4.conf.all.route_localnet=1",
 			"iptables -t nat -I POSTROUTING 1 -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE",
@@ -169,13 +173,17 @@ func setupContainer(id string) {
 		for k, _ := range container.Config.Labels {
 			results := re.FindStringSubmatch(k)
 			if len(results) > 1 {
+				hasBackends = true
 				cmds = append(cmds, fmt.Sprintf(
 					"iptables -t nat -I OUTPUT 1 -m addrtype --src-type LOCAL --dst-type LOCAL -p tcp --dport %s -j DNAT --to-destination %s:%s",
 					results[1], self.NetworkSettings.IPAddress, results[1]))
 			}
 		}
-		shellCmd := strings.Join(cmds, " && ")
-		assert(runNetCmd(container.ID, self.Image, []string{"/bin/sh", "-c", shellCmd}))
+		if hasBackends {
+			log.Printf("setting iptables on %s \n", container.ID[:12])
+			shellCmd := strings.Join(cmds, " && ")
+			assert(runNetCmd(container.ID, self.Image, shellCmd))
+		}
 	}
 }
 
@@ -213,7 +221,7 @@ func main() {
 	listener, err := net.Listen("tcp", ":"+port)
 	assert(err)
 
-	log.Println("Connectable listening on", port, "...")
+	fmt.Printf("# Connectable %s listening on %s ...\n", Version, port)
 
 	endpoint := "unix:///var/run/docker.sock"
 	client, _ := docker.NewClient(endpoint)
@@ -223,16 +231,18 @@ func main() {
 		c, _ := client.InspectContainer(listing.ID)
 		if c.Config.Hostname == os.Getenv("HOSTNAME") {
 			self = c
-			fmt.Println("Self:", c.ID, c.HostConfig.NetworkMode)
 			if c.HostConfig.NetworkMode == "bridge" {
+				fmt.Printf("# Setting iptables on connectable... ")
 				shellCmd := fmt.Sprintf("iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-ports %s", port)
-				assert(runNetCmd(c.ID, c.Image, []string{"/bin/sh", "-c", shellCmd}))
+				assert(runNetCmd(c.ID, c.Image, shellCmd))
+				fmt.Printf("done.\n")
 			}
 		}
 	}
 
 	if self == nil {
-		log.Fatal("unable to find self")
+		fmt.Println("# unable to find self")
+		os.Exit(1)
 	}
 
 	go monitorContainers()
@@ -256,11 +266,12 @@ func main() {
 			continue
 		}
 		if len(backendAddrs) == 0 {
+			log.Println(conn.RemoteAddr(), backend, "no backends")
 			conn.Close()
 			continue
 		}
 
-		log.Println(conn.RemoteAddr(), "->", backendAddrs[0])
+		log.Println(conn.RemoteAddr(), backend, "->", backendAddrs[0])
 		go proxyConn(conn, backendAddrs[0])
 	}
 }
