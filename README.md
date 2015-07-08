@@ -1,5 +1,8 @@
 # Connectable
 
+[![Docker Hub](https://img.shields.io/badge/docker-ready-blue.svg)](https://registry.hub.docker.com/u/gliderlabs/connectable/)
+[![IRC Channel](https://img.shields.io/badge/irc-%23gliderlabs-blue.svg)](https://kiwiirc.com/client/irc.freenode.net/#gliderlabs)
+
 A smart Docker proxy that lets your containers connect to other containers via service
 discovery *without being service discovery aware*.
 
