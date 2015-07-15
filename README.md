@@ -106,3 +106,4 @@ Connectable is sponsored by [Weave](http://weave.works). The original ambassador
 ## License
 
 MIT
+<img src="https://ga-beacon.appspot.com/UA-58928488-2/connectable/readme?pixel" />
