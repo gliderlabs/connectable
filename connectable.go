@@ -178,8 +178,10 @@ func setupContainer(id string) error {
 			log.Printf("setting iptables on %s \n", container.ID[:12])
 			shellCmd := strings.Join(cmds, " && ")
 			err := runNetCmd(container.ID, self.Image, shellCmd)
-			log.Printf("error setting iptables on %s: %s \n", container.ID[:12], err)
-			return err
+			if err != nil {
+				log.Printf("error setting iptables on %s: %s \n", container.ID[:12], err)
+				return err
+			}
 		}
 	}
 	return nil
