@@ -157,7 +157,7 @@ func setupContainer(id string) {
 	if err != nil {
 		log.Println(err)
 	}
-	if container.HostConfig.NetworkMode == "bridge" {
+	if container.HostConfig.NetworkMode == "bridge" || container.HostConfig.NetworkMode == "default" {
 		hasBackends := false
 		cmds := []string{
 			"/sbin/sysctl -w net.ipv4.conf.all.route_localnet=1",
@@ -213,7 +213,7 @@ func main() {
 		assert(err)
 		if c.Config.Hostname == os.Getenv("HOSTNAME") {
 			self = c
-			if c.HostConfig.NetworkMode == "bridge" {
+			if c.HostConfig.NetworkMode == "bridge" || c.HostConfig.NetworkMode == "default" {
 				fmt.Printf("# Setting iptables on connectable... ")
 				shellCmd := fmt.Sprintf("iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-ports %s", port)
 				assert(runNetCmd(c.ID, c.Image, shellCmd))
