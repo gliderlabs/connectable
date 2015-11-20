@@ -199,7 +199,7 @@ func monitorContainers() {
 	}
 	for msg := range events {
 		switch msg.Status {
-		case "create":
+		case "start":
 			go setupContainer(msg.ID)
 		}
 	}
