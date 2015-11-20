@@ -147,15 +147,17 @@ func proxyConn(conn net.Conn, addr string) {
 	<-done
 }
 
-func setupContainer(id string) {
+func setupContainer(id string) error {
 	re := regexp.MustCompile("connect\\[(\\d+)\\]")
 	client, err := docker.NewClient(endpoint)
 	if err != nil {
 		log.Println(err)
+		return err
 	}
 	container, err := client.InspectContainer(id)
 	if err != nil {
 		log.Println(err)
+		return err
 	}
 	if container.HostConfig.NetworkMode == "bridge" || container.HostConfig.NetworkMode == "default" {
 		hasBackends := false
@@ -175,9 +177,15 @@ func setupContainer(id string) {
 		if hasBackends {
 			log.Printf("setting iptables on %s \n", container.ID[:12])
 			shellCmd := strings.Join(cmds, " && ")
-			assert(runNetCmd(container.ID, self.Image, shellCmd))
+			err := runNetCmd(container.ID, self.Image, shellCmd)
+			if err != nil {
+				log.Printf("error setting iptables on %s: %s \n", container.ID[:12], err)
+				return err
+			}
 		}
 	}
+	return nil
+
 }
 
 func monitorContainers() {
