@@ -88,7 +88,7 @@ func inspectBackend(sourceIP, destPort string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	label := fmt.Sprintf("connect[%s]", destPort)
+	label := fmt.Sprintf("connect.%s", destPort)
 
 	// todo: cache, invalidate with container destroy events
 	containers, err := client.ListContainers(docker.ListContainersOptions{})
