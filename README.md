@@ -37,13 +37,13 @@ With Resolvable running, it will have access to Consul DNS. It will be able to r
 
 All you have to do is specify a port to use and what you'd like to connect to as a label. For example:
 
-	connect[6000]=redis.service.consul
+	connect.6000=redis.service.consul
 
 With this label set, you can connect to Redis on localhost:6000. You can also specify multiple services:
 
 	$ docker run -d --name myservice \
-			-l connect[6000]=redis.service.consul \
-			-l connect[3306]=master.mysql.service.consul \
+			-l connect.6000=redis.service.consul \
+			-l connect.3306=master.mysql.service.consul \
 			example/myservice
 
 ## Load Balancing
