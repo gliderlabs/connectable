@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+
+: "${DEV_IMAGE_TAG:=connectable:dev-env}"
+: "${DEV_CONTAINER_NAME:=connectable-dev}"
+
+exists() { # type name
+  docker inspect --type "$1" -f '{{.Id}}' "$2" >/dev/null 2>&1
+}
+
+if ! exists image "$DEV_IMAGE_TAG"; then
+  printf '\n==> %s\n\n' 'Building base image...'
+  docker build -t "$DEV_IMAGE_TAG" -f Dockerfile.dev .
+fi
+
+if ! exists container "$DEV_CONTAINER_NAME"; then
+  docker create >/dev/null -it --name "$DEV_CONTAINER_NAME" \
+    -h dev \
+    -e GOPATH=/go \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v "$(pwd)":/go/src/github.com/gliderlabs/connectable \
+    -w /go/src/github.com/gliderlabs/connectable \
+    "$DEV_IMAGE_TAG" sh -c '
+      run() { cmd=$1; shift; printf "\\n==> %s\\n\\n" "$cmd $*"; "$cmd" "$@"; }
+      set -e
+      run go get
+      run go build -ldflags "-X main.Version dev" -o /bin/connectable
+      run exec /bin/connectable'
+fi
+
+exec docker start -ia "$DEV_CONTAINER_NAME"
