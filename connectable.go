@@ -148,7 +148,7 @@ func proxyConn(conn net.Conn, addr string) {
 }
 
 func setupContainer(id string) error {
-	re := regexp.MustCompile("connect\\[(\\d+)\\]")
+	re := regexp.MustCompile("connect\\.(\\d+)")
 	client, err := docker.NewClient(endpoint)
 	if err != nil {
 		log.Println(err)
