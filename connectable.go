@@ -214,12 +214,14 @@ func main() {
 	client, err := docker.NewClient(endpoint)
 	assert(err)
 
+	selfImageRe := regexp.MustCompile("(?:^|/)connectable(?:$|:)")
+
 	list, err := client.ListContainers(docker.ListContainersOptions{})
 	assert(err)
 	for _, listing := range list {
 		c, err := client.InspectContainer(listing.ID)
 		assert(err)
-		if c.Config.Hostname == os.Getenv("HOSTNAME") {
+		if c.Config.Hostname == os.Getenv("HOSTNAME") && selfImageRe.FindString(c.Config.Image) != "" {
 			self = c
 			if c.HostConfig.NetworkMode == "bridge" || c.HostConfig.NetworkMode == "default" {
 				fmt.Printf("# Setting iptables on connectable... ")
