@@ -23,6 +23,7 @@ var Version string
 var (
 	endpoint = env.String("docker_host", "unix:///var/run/docker.sock", "docker endpoint")
 	port     = env.String("port", "10000", "primary listen port")
+	network  = env.String("network", "default", "network to match on")
 
 	self *docker.Container
 )
@@ -100,7 +101,7 @@ func inspectBackend(sourceIP, destPort string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if container.NetworkSettings.IPAddress == sourceIP {
+		if container.NetworkSettings.IPAddress == sourceIP || container.NetworkSettings.Networks[self.HostConfig.NetworkMode].IPAddress == sourceIP {
 			backend, ok := container.Config.Labels[label]
 			if !ok {
 				return "", fmt.Errorf("connect label '%s' not found: %v", label, container.Config.Labels)
@@ -159,7 +160,7 @@ func setupContainer(id string) error {
 		log.Println(err)
 		return err
 	}
-	if container.HostConfig.NetworkMode == "bridge" || container.HostConfig.NetworkMode == "default" {
+	if container.HostConfig.NetworkMode == "bridge" || container.HostConfig.NetworkMode == network {
 		hasBackends := false
 		cmds := []string{
 			"/sbin/sysctl -w net.ipv4.conf.all.route_localnet=1",
@@ -168,15 +169,21 @@ func setupContainer(id string) error {
 		for k, _ := range container.Config.Labels {
 			results := re.FindStringSubmatch(k)
 			if len(results) > 1 {
+				IPAddress := self.NetworkSettings.IPAddress
+				if container.HostConfig.NetworkMode == network {
+					IPAddress = self.NetworkSettings.Networks[self.HostConfig.NetworkMode].IPAddress
+				}
+
 				hasBackends = true
 				cmds = append(cmds, fmt.Sprintf(
 					"iptables -t nat -I OUTPUT 1 -m addrtype --src-type LOCAL --dst-type LOCAL -p tcp --dport %s -j DNAT --to-destination %s:%s",
-					results[1], self.NetworkSettings.IPAddress, results[1]))
+					results[1], IPAddress, results[1]))
 			}
 		}
 		if hasBackends {
 			log.Printf("setting iptables on %s \n", container.ID[:12])
 			shellCmd := strings.Join(cmds, " && ")
+			log.Printf("%s", shellCmd)
 			err := runNetCmd(container.ID, self.Image, shellCmd)
 			if err != nil {
 				log.Printf("error setting iptables on %s: %s \n", container.ID[:12], err)
@@ -209,7 +216,7 @@ func main() {
 	listener, err := net.Listen("tcp", ":"+port)
 	assert(err)
 
-	fmt.Printf("# Connectable %s listening on %s ...\n", Version, port)
+	fmt.Printf("# Connectable %s listening on %s ... (network: %s)\n", Version, port, network)
 
 	client, err := docker.NewClient(endpoint)
 	assert(err)
@@ -223,7 +230,7 @@ func main() {
 		assert(err)
 		if c.Config.Hostname == os.Getenv("HOSTNAME") && selfImageRe.FindString(c.Config.Image) != "" {
 			self = c
-			if c.HostConfig.NetworkMode == "bridge" || c.HostConfig.NetworkMode == "default" {
+			if c.HostConfig.NetworkMode == "bridge" || c.HostConfig.NetworkMode == network {
 				fmt.Printf("# Setting iptables on connectable... ")
 				shellCmd := fmt.Sprintf("iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-ports %s", port)
 				assert(runNetCmd(c.ID, c.Image, shellCmd))
